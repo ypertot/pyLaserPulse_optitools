@@ -264,7 +264,7 @@ class step_index_active_fibre(
                  NA, beat_length, n2, fR, tol, doping_concentration,
                  cross_section_file, seed_repetition_rate, pump_points,
                  ASE_wl_lims, Sellmeier_file, boundary_conditions,
-                 lifetime=1.5e-3, cladding_pumping={}, time_domain_gain=False,
+                 lifetime=1.5e-3, cladding_pumping={},
                  verbose=False):
         """
         Parameters
@@ -329,10 +329,6 @@ class step_index_active_fibre(
                     the pump cladding (usually n_silica - 1.375)
                 pump_cladding_n : float
                     Refractive index of the fibre coating (usually 1.375)
-        time_domain_gain : bool
-            True if mixed-domain gain operator (i.e., both frequency- and
-            time-domain gain) is to be used. If False, only frequency-
-            domain gain is simulated.
 
         Notes
         -----
@@ -407,7 +403,7 @@ class step_index_active_fibre(
         bases.active_fibre_base.__init__(
             self, g, doping_concentration, cross_section_file,
             seed_repetition_rate, pump_points, ASE_wl_lims, Sellmeier_file,
-            lifetime, cladding_pumping, time_domain_gain, boundary_conditions,
+            lifetime, cladding_pumping, boundary_conditions,
             verbose=verbose)
 
         # Get core ASE parameters if cladding pumping.
@@ -488,7 +484,7 @@ class photonic_crystal_active_fibre(
             doping_concentration, cross_section_file, seed_repetition_rate,
             pump_points, ASE_wl_lims, Sellmeier_file, boundary_conditions,
             core_diam=None, lifetime=1.5e-3, cladding_pumping={},
-            time_domain_gain=False, verbose=False):
+            verbose=False):
         """
         Parameters
         ----------
@@ -556,10 +552,6 @@ class photonic_crystal_active_fibre(
                     the pump cladding (usually n_silica - 1.375)
                 pump_cladding_n : float
                     Refractive index of the fibre coating (usually 1.375)
-        time_domain_gain : bool
-            True if mixed-domain gain operator (i.e., both frequency- and
-            time-domain gain) is to be used. If False, only frequency-
-            domain gain is simulated.
         verbose : bool
             Print information to terminal if True
 
@@ -635,7 +627,7 @@ class photonic_crystal_active_fibre(
         bases.active_fibre_base.__init__(
             self, g, doping_concentration, cross_section_file,
             seed_repetition_rate, pump_points, ASE_wl_lims, Sellmeier_file,
-            lifetime, cladding_pumping, time_domain_gain, boundary_conditions,
+            lifetime, cladding_pumping, boundary_conditions,
             verbose=verbose)
 
         # Get core ASE parameters if cladding pumping.

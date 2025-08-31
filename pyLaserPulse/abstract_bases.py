@@ -20,6 +20,7 @@ import pyLaserPulse.bessel_mode_solver as bms
 import pyLaserPulse.pulse as pls
 import pyLaserPulse.pump as pmp
 import pyLaserPulse.exceptions as exc
+from scipy.integrate import solve_ivp
 # import pyLaserPulse.sys_info as si
 
 
@@ -595,7 +596,7 @@ class active_fibre_base(ABC):
     def __init__(
             self, g, N_ions, cross_section_file, seed_rep_rate, pump_points,
             pump_wl_lims, Sellmeier_file, lifetime, cladding_pumping,
-            time_domain_gain, boundary_conditions, verbose=True):
+            boundary_conditions, verbose=True):
         """
         Parameters
         ----------
@@ -621,10 +622,6 @@ class active_fibre_base(ABC):
             Upper-state lifetime of the rare-earth dopant in s.
         cladding_pumping : bool
             True if cladding pumping, False if core pumping.
-        time_domain_gain : bool
-            True if mixed-domain gain operator (i.e., both frequency- and
-            time-domain gain) is to be used. If False, only frequency-
-            domain gain is simulated.
         boundary_conditions : dict
             Set the boundary conditions for resolving the evolution of the
             pump, signal, and ASE light in both directions through the fibre.
@@ -682,7 +679,6 @@ class active_fibre_base(ABC):
         """
         self.grid = g
         self.lifetime = lifetime
-        self.time_domain_gain = time_domain_gain
         self.Sellmeier_file = Sellmeier_file
 
         self.boundary_conditions = boundary_conditions
@@ -691,12 +687,6 @@ class active_fibre_base(ABC):
         if self.boundary_value_solver:
             self.dz = 5e-3
             self.num_steps = int(np.ceil(self.L / self.dz))
-
-        if self.time_domain_gain:
-            self._propagation_func = \
-                self._Euler_approximate_mixed_domain_gain_field
-        else:
-            self._propagation_func = self._Euler_frequency_domain_gain_field
 
         # self.oscillator == True if used in oscillator simulation
         # This should be changed in optical_assemblies.py
@@ -801,7 +791,58 @@ class active_fibre_base(ABC):
                 self.pump.points, self.pump.lambda_window,
                 self.pump_effective_MFD)
 
-        self._precalculate_propagation_values()
+    def calculate_inversion_from_pump(self, pump_power: float, pump_duration: float):
+        """
+        Calculates the population inversion profile N2(z) from CW pump.
+        """
+        if not hasattr(self, 'pump'):
+            raise AttributeError("Pump not initialized for this fiber.")
+
+        # Assume pump is monochromatic at its central wavelength
+        pump_idx = self.pump.midpoint
+        pump_abs_cs = self.pump_absorption_cs[pump_idx]
+        pump_mode_area = self.pump_mode_area[pump_idx]
+        pump_energy = self.pump.energy_window[pump_idx]
+
+        I_p = pump_power / pump_mode_area
+        R13 = pump_abs_cs * I_p / pump_energy
+
+        def rate_eq(t, N2, R13, N_tot, tau21):
+            N1 = N_tot - N2
+            return R13 * N1 - N2 / tau21
+
+        # Initial condition: no inversion
+        N2_initial = np.array([0.0])
+
+        # Time span for integration
+        t_span = [0, pump_duration]
+
+        # Solve ODE
+        sol = solve_ivp(
+            rate_eq,
+            t_span,
+            N2_initial,
+            args=(R13, self.N_tot, self.lifetime),
+            dense_output=True,
+            method='RK45'
+        )
+
+        # Get the final N2 value
+        N2_final = sol.sol(pump_duration)[0]
+
+        if not hasattr(self, 'num_steps'):
+            self.num_steps = int(np.ceil(self.L / 1e-3)) # Default step size
+
+        self.N2_profile = np.full(self.num_steps, N2_final)
+
+    def apply_spontaneous_decay(self, delay_time: float):
+        """
+        Applies spontaneous decay to the population inversion profile.
+        """
+        if not hasattr(self, 'N2_profile'):
+            raise AttributeError("N2_profile not calculated yet. Run calculate_inversion_from_pump first.")
+
+        self.N2_profile *= np.exp(-delay_time / self.lifetime)
 
     def make_verbose(self):
         """
