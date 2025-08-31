@@ -793,7 +793,8 @@ class active_fibre_base(ABC):
 
     def calculate_inversion_from_pump(self, pump_power: float, pump_duration: float):
         """
-        Calculates the population inversion profile N2(z) from CW pump.
+        Calculates the population inversion profile N2(z) from CW pump
+        and the initial ASE spectrum.
         """
         if not hasattr(self, 'pump'):
             raise AttributeError("Pump not initialized for this fiber.")
@@ -835,6 +836,13 @@ class active_fibre_base(ABC):
 
         self.N2_profile = np.full(self.num_steps, N2_final)
 
+        # Calculate initial ASE spectrum (one photon per mode)
+        # This is the quantum noise limit for ASE.
+        ase_power_per_mode = const.h * self.pump.f_window * self.pump.dOmega
+
+        # Distribute equally between two polarizations
+        self.ASE_spectrum = np.full((2, self.pump.points), ase_power_per_mode / 2)
+
     def apply_spontaneous_decay(self, delay_time: float):
         """
         Applies spontaneous decay to the population inversion profile.
@@ -843,6 +851,31 @@ class active_fibre_base(ABC):
             raise AttributeError("N2_profile not calculated yet. Run calculate_inversion_from_pump first.")
 
         self.N2_profile *= np.exp(-delay_time / self.lifetime)
+
+    def amplify_ase_during_decay(self, delay_time: float):
+        """
+        Simulates the amplification of ASE during the decay period.
+        """
+        if not hasattr(self, 'N2_profile') or not hasattr(self, 'ASE_spectrum'):
+            raise AttributeError("N2_profile or ASE_spectrum not calculated yet.")
+
+        time_steps = 100
+        dt = delay_time / time_steps
+
+        for _ in range(time_steps):
+            # N2 is uniform along z, so we can use N2_profile[0]
+            N2 = self.N2_profile[0]
+
+            # 1. Decay N2
+            d_N2 = - (N2 / self.lifetime) * dt
+            N2 += d_N2
+            self.N2_profile.fill(N2)
+
+            # 2. Amplify ASE
+            N1 = self.N_tot - N2
+            gain = self.N_tot * self.pump_overlaps * (self.pump_emission_cs * N2 - self.pump_absorption_cs * N1)
+            total_gain = np.exp(gain * self.L)
+            self.ASE_spectrum *= total_gain
 
     def make_verbose(self):
         """

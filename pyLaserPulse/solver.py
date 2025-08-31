@@ -13,6 +13,10 @@ class Solver:
         if self.N2_profile is None:
             raise ValueError("The fiber object must have an N2_profile attribute. Please run calculate_inversion_from_pump() first.")
 
+        self.ASE_spectrum = np.copy(getattr(fiber, 'ASE_spectrum', None))
+        if self.ASE_spectrum is None:
+            print("Warning: ASE spectrum not found in fiber object. Continuing without ASE.")
+
     def _nonlinear_step(self, field, dz, pm):
         """
         Apply and return nonlinear contribution to RK4IP step
@@ -78,6 +82,23 @@ class Solver:
 
         z_grid = np.linspace(0, self.fiber.L, num_steps)
         ufft = utils.fft(self.pulse.field, axis=-1)
+
+        if self.ASE_spectrum is not None:
+            # Interpolate ASE spectrum to the signal grid
+            # The ASE spectrum is power, so we need to sqrt for field
+            ase_amp = np.sqrt(self.ASE_spectrum)
+
+            # Interpolate amplitude to signal grid
+            interp_ase_amp = np.zeros((2, self.pulse.grid.points))
+            interp_ase_amp[0, :] = np.interp(self.pulse.grid.lambda_window, self.fiber.pump.lambda_window, ase_amp[0, :])
+            interp_ase_amp[1, :] = np.interp(self.pulse.grid.lambda_window, self.fiber.pump.lambda_window, ase_amp[1, :])
+
+            # Add random phase to create complex field
+            random_phase = np.exp(2j * np.pi * np.random.rand(2, self.pulse.grid.points))
+            ase_fft = interp_ase_amp * random_phase
+
+            # Add to the pulse spectrum
+            ufft += ase_fft
 
         for i in range(num_steps):
             z = z_grid[i]
